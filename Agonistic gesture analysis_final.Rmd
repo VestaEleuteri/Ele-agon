@@ -1,0 +1,1868 @@
+---
+title: "Elephant gestural communication during agonistic interactions"
+author: "Vesta Eleuteri"
+output:
+  rmdformats::material:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    cards: true
+    code_folding: hide
+---
+  
+# Load environment and required packages
+
+```{r load-libraries}
+rm(list=ls())
+
+#Load packages 
+library(ggplot2) #for plotting
+library(patchwork) # to make combined plots
+library(scico) #for plotting
+library(here) #to set up working directory
+library(dplyr) #to sort data
+library(tidyr) #to sort data
+library(knitr) #to dispaly tables
+library(kableExtra) #to dispaly tables
+library(lme4) #glmm 
+library(mclogit) #multinomial glmm
+library(performance) #overdispersion
+library(forcats)
+
+#Load plot theme
+source("Agonistic theme_ed.R")
+
+#knitr settings to set Rmd look
+library(knitr)
+knitr::opts_chunk$set(
+    warning = FALSE,
+    message = FALSE,
+    fig.width = 10,
+    fig.height = 6,
+    out.width = "100%",
+    cache = TRUE
+)
+```
+
+# Set directory
+
+```{r set-environment}
+here::i_am(file.path("Agonistic gesture analysis_final.Rmd")) 
+```
+
+# Load data
+
+```{r load-full-data}
+setwd("/Users/ve/Desktop/PhD/Analysis/Chapter 3 - Agonistic/datasets")
+xdata=read.csv("agon_data.csv",
+                   header=T, sep=",", fill=T, dec=",", stringsAsFactors=T)
+```
+
+# Testing for intentionality criteria 
+
+We first used Binomial tests and Chi-sq tests to test for the 4 intentionality criteria in the whole dataset (including data from identified and unidentified signallers). Then we used GLMMs to test for the intentionality criteria while controlling for pseudoreplication by including only the data from identified signallers.
+
+# Audience directedness - all data
+
+Here we tested for for audience directedness including the whole dataset (from identified and unidentified signallers).
+We conducted the analyses for audience directedness at the level of the gesture token (see Data coding).
+
+First we sorted the data by re-leveling recipient visual attention to "Yes" and "No", and to removed tokens where their visual attention was unknown or the recipient was out of sight.
+
+```{r sort-data-rcp-va}
+# Relevel recipient va to Yes and No
+xdata_rcpva <- xdata %>%
+    mutate(
+      Rcp_Visual_att = recode(Rcp_Visual_att,
+                                 "VA_90" = "Yes",
+                                 "VA_160" = "Unk",
+                                 "Looking_Back" = "Yes",
+                                 "VA_front" = "Yes",
+                                 "No_VA" = "No")
+    ) %>%
+  filter(!Rcp_Visual_att %in% c("Unk", "Out_of_sight")) %>% #remove where unsure Yes or No
+  mutate(
+    Rcp_Visual_att = droplevels(Rcp_Visual_att)
+  )
+```
+
+### Plot Recipient visual attention
+
+We then plotted the frequencies of recipient visual attention. 
+
+```{r bar-plot-rcp-va, fig.width=10}
+# Frequency recipient visual attention
+xdata_rcpva %>%
+  count(Rcp_Visual_att, name = "Frequency") %>%
+  rename(`Recipient visual attention` = Rcp_Visual_att) %>%
+  kable(format = "html", caption = "Frequency of recipient visual attention to signaller's gesture") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2, width = "100px")
+
+# Plot recipient visual attention
+ggplot(xdata_rcpva, aes(x = Rcp_Visual_att, fill=Rcp_Visual_att)) +
+ geom_bar(color = "black") + labs(title = "Frequency of recipient visual attention",
+       x = "Recipient visual attention",
+       y = "Frequency", fill = "") + theme_agon() +  scale_fill_grey(start = 1, end = 0) +
+  scale_y_continuous(limits = c(0, 800)) 
+
+ggsave(here::here("plots", "intentionality plots", "Recipient_VA_plot.pdf"), width = 12, height = 8)
+ggsave(here::here("plots", "intentionality plots", "Recipient_VA_plot.png"), width = 12, height = 8)
+
+```
+
+### Binomial test Recipient visual attention
+
+Then we used a Binomial test to test if signallers produce more gestures when the recipient is visually attending to them.
+
+```{r bin-rcp-va}
+# Binomial test
+bin_rcp_va=binom.test(
+  x = sum(xdata_rcpva$Rcp_Visual_att == "Yes"),
+  n = sum(xdata_rcpva$Rcp_Visual_att %in% c("Yes", "No")),
+  p = 0.5,
+  alternative = "two.sided"
+)
+bin_rcp_va 
+```
+**We found that signallers produce more gestures when the recipient is visually attending to them.**
+
+### Frequency and Chi-sq test Gesture modality per Recipient visual attention
+
+Then we used a Chi-sq test to assess whether signallers select the appropriate sensory modality of their gestures according to the recipient's state of visual attention for the whole dataset (from identified and unidentified signallers). 
+
+```{r bin-rcp-va-mod}
+# Table for Chi.sq test
+xdata_rcpva_mod=subset(xdata_rcpva, ! Modality %in% c("Unknown")) %>% droplevels() #drop unknown modality
+
+table_mod_rcp_va <-table(xdata_rcpva_mod$Modality, xdata_rcpva_mod$Rcp_Visual_att) 
+
+# Table frequency of gesture modality 
+table_mod <- xdata_rcpva_mod %>%
+  count(Modality, name = "Frequency") %>%
+  rename(
+    `Gesture modality` = Modality,
+  )
+
+table_mod %>% kable(format = "html", caption = "Frequency of gesture modality") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE)
+
+# Table frequency of gesture modality per recipient visual attention
+table_mod_rcp_va2 <- xdata_rcpva_mod %>%
+  count(Modality, Rcp_Visual_att, name = "Frequency") 
+
+table_mod_rcp_va2 %>%
+  rename(`Gesture modality` = Modality) %>%
+  rename(`Recipient visual attention` = Rcp_Visual_att)  %>%
+  kable(format = "html", caption = "Frequency of gesture modality by recipient visual attention")  %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:ncol(table_mod_rcp_va2), width = "100px")
+
+# Chi-sq test
+chisq.test(table_mod_rcp_va)
+```
+## Percentage variation plot Gesture modality by recipient visual attention
+
+```{r perc-var-plot}
+xdata_rcpva_mod$Modality <- relevel(xdata_rcpva_mod$Modality, ref = "Silent-visual")
+
+# Calculate proportions of modalit overall
+alpha_overall <- xdata_rcpva_mod %>%
+  count(Modality, name = "n_alpha") %>%
+  mutate(alpha = n_alpha / sum(n_alpha)) %>%
+  select(Modality, alpha)
+
+# Calculate proportions of modality within each attentional state
+beta_by_attn <- xdata_rcpva_mod %>%
+  count(Modality, Rcp_Visual_att, name = "n_beta") %>%
+  group_by(Rcp_Visual_att) %>%
+  mutate(beta = n_beta / sum(n_beta)) %>%
+  ungroup()
+
+# Then calculate percentage deviation formula= (β/α - 1) * 100
+variation_df <- beta_by_attn %>%
+  left_join(alpha_overall, by = "Modality") %>%
+  mutate(
+    deviation = 100 * (beta / alpha - 1)
+  ) %>%
+  mutate(
+    Rcp_Visual_att = factor(Rcp_Visual_att, levels = c("Yes","No"))
+  )
+
+# Table of modality per recipient visual attention
+variation_df %>%
+  transmute(
+    Modality,
+    `Recipient visual attention` = Rcp_Visual_att,
+    `α overall` = round(alpha*100, 1),
+    `β within attention` = round(beta*100, 1),
+    `Deviation (%)` = round(deviation, 1)
+  ) %>%
+  kable(format = "html", caption = "Percentage variation: (β/α − 1) × 100") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Make percentage deviation plot
+plot_variation <- ggplot(variation_df,
+                         aes(x = Rcp_Visual_att, y = deviation, fill = Modality)) +
+  geom_hline(yintercept = 0, color = "grey50") +
+  geom_col(position = position_dodge(width = 0.75), width = 0.65) +
+  labs(
+    x = "Recipient visual attention",
+    y = "Percentage variation",
+    title = "Percentage-variation plot of gesture modality with recipient visual attention"
+  ) +
+  theme_agon() + scico::scale_fill_scico_d(palette = "roma", begin=0.4, end=0.9) +
+  scale_y_continuous(breaks = seq(-100, 100, 25),  
+                     expand = c(0,0)) +
+  theme(legend.title = element_blank())  
+
+plot_variation
+ggsave(here::here("plots", "intentionality plots", "Perc_variation_mod_rcp_vA_plot.pdf"), width = 16, height = 8)
+ggsave(here::here("plots", "intentionality plots", "Perc_variation_mod_rcp_vA_plot.png"), width = 16, height = 8)
+```
+
+*We found that signallers use more audible and tactile gestures than silent visual gestures when recipients are not visually attending to them.*
+
+# Audience directedness - signaller identified data
+
+Here we tested for audience directedness while controlling for pseudoreplication (repeated data from the same signallers). 
+
+First we subsetted the gesture record data to identified signallers contributing at least 4 gesture tokens (necessary for random effect) and dummy coded the response.
+
+```{r sort-id-data-rcp-va}
+# Remove data where signaller not identified
+xdata_rcpva_id <- xdata_rcpva %>%
+  filter(!Signaller %in% c("AF_medium", "AF_old", "AF_young", "AM", "AM_medium", "AM_young")) %>%
+  droplevels() #remove unidentified signallers
+
+# Remove signallers with less than 4 tokens
+xdata_rcpva_id <- xdata_rcpva_id %>%
+  group_by(Pop_Signaller) %>%
+  filter(n() >= 4) %>%
+  ungroup() %>% 
+  droplevels() 
+
+# Dummy code response variable to 0 and 1
+xdata_rcpva_id$Rcp_Visual_att_dc=as.numeric(xdata_rcpva_id$Rcp_Visual_att=="Yes") 
+```
+
+### GLMM for Recipient visual attention 
+
+We then ran a logistic GLMM to test whether signallers produce more gestures when the recipient is visually attending to them including Signaller as a random effect.
+
+```{r glmm-rcp-va}
+GLMM_rcpva=glmer(Rcp_Visual_att_dc ~ (1|Pop_Signaller),
+            data=xdata_rcpva_id, family=binomial)
+```
+
+#### GLMM Assumptions
+
+Then we checked the glmm assumptions.
+
+```{r glmm-rcp-va-assum, warning=FALSE, message=FALSE}
+# BLUPs assumption (dist of random effects)
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/diagnostic_fcns.r") #set function by Roger Mundry
+ranef.diagn.plot(GLMM_rcpva) 
+
+# Model stability
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/glmm_stability.r") #set function by Roger Mundry
+control=glmerControl(optimizer="bobyqa",
+       optCtrl=list(maxfun=100000))
+m_stab_rcpva=glmm.model.stab(model.res=GLMM_rcpva, contr=control) 
+
+#table(m_stab_rcpva$detailed$lme4.warnings) #check for warnings: isSingular messages
+#table(m_stab_rcpva$detailed$opt.warnings)  #check for convergence: all models converged now with cor
+
+m_stab_rcpva_rd=round(m_stab_rcpva$summary[, -1], 3) #check model stability estimates
+m_stab_rcpva_rd
+m.stab.plot(m_stab_rcpva$summary[, -1]) #check model stability plot
+
+# Overdispersion
+check_overdispersion(GLMM_rcpva) #check overdispersion
+```
+The distribution of random effects looks ok, the model is stable, there is no issue of overdispersion.
+
+#### GLMM Results
+
+Then we checked the model summary for the results. 
+
+```{r glmm-rcpva-res}
+# Summary output
+summary(GLMM_rcpva)
+
+# Compute predicted probability of gesturing when recipient has visual attention
+exp(fixef(GLMM_rcpva)["(Intercept)"])/
+      (1+exp(fixef(GLMM_rcpva)["(Intercept)"])) 
+```
+**We found that signallers gesture more when recipients are visually attending to their gestures.**
+
+### Frequency Gesture modality per Recipient visual attention 
+
+Then we used a a multinomial GLMM to test whether signallers select the appropriate sensory modality of their gestures according to the recipient's state of visual attention while controlling for pseudoreplication. 
+
+To do so, first we inspected the frequency of gesture modality per recipient visual attention.
+
+```{r sort-rcp-va-mod-id}
+# Drop where modality unknown (gesture Trunk-Reach_Touch_Unc)
+xdata_rcpva_id_mod=subset(xdata_rcpva_id, ! Modality %in% c("Unknown")) %>% droplevels() 
+
+# Table frequency of gesture modality 
+table_mod_id <- xdata_rcpva_id_mod %>%
+  count(Modality, name = "Frequency") %>%
+  rename(
+    `Gesture modality` = Modality,
+  )
+
+table_mod_id %>% kable(format = "html", caption = "Frequency of gesture modality") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) 
+
+# Table frequency of gesture modality by recipient visual attention
+table_mod_rcpva_id <- xdata_rcpva_id_mod %>%
+  count(Modality, Rcp_Visual_att, name = "Frequency") %>%
+  rename(
+    `Gesture modality` = Modality,
+    `Recipient visual attention` = Rcp_Visual_att
+  )
+
+table_mod_rcpva_id %>%
+  kable(format = "html", caption = "Frequency of gesture modality by recipient visual attention") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:3, width = "100px")
+```
+
+## Mblogit GLMM for Gesture modality per Recipient visual attention
+
+Then we ran the multinomial glmm including Signaller as a random effect.
+
+To do so, first we re-leveled the response and predictor variables. 
+
+```{r sort-rcp-va-mod, warning=FALSE, message=FALSE}
+# Relevel response and predictor for mblogit
+xdata_rcpva_id_mod$Modality <- relevel(xdata_rcpva_id_mod$Modality, ref = "Silent-visual")
+xdata_rcpva_id_mod$Rcp_Visual_att <- relevel(xdata_rcpva_id_mod$Rcp_Visual_att, ref = "Yes")
+```
+
+#### Mblogit
+
+Then we ran the model.
+
+```{r mblogit-rcp-va-mod, warning=FALSE, message=FALSE}
+Mblogit_rcpva <- mblogit(Modality ~ Rcp_Visual_att, random=~1|Signaller, data=xdata_rcpva_id_mod)
+```
+
+#### Full-null model comparison 
+
+Then we checked the general effect of the predictor with a full-null model comparison. 
+
+```{r full-null-rcp-va-mod, warning=FALSE, message=FALSE}
+# Full null model comparison 
+Null_Mblogit_rcpva <- mblogit(Modality ~ 1,random = ~1 | Signaller, data = xdata_rcpva_id_mod)
+Chisq_Mblogit_rcpva<-round(as.data.frame(anova(Null_Mblogit_rcpva, Mblogit_rcpva, test="Chisq")), 3)
+Chisq_Mblogit_rcpva
+```
+
+**We found that signallers do not modulate gesture modality according to recipient visual attention in the identified dataset.**
+
+## Percentage variation plot Gesture modality by recipient visual attention
+
+```{r perc-var-plot-id}
+# Calcualte proportions of modality overall
+alpha_overall <- xdata_rcpva_id_mod %>%
+  count(Modality, name = "n_alpha") %>%
+  mutate(alpha = n_alpha / sum(n_alpha)) %>%
+  select(Modality, alpha)
+
+# Calculate proportions of modality within each attentional state
+beta_by_attn <- xdata_rcpva_id_mod %>%
+  count(Modality, Rcp_Visual_att, name = "n_beta") %>%
+  group_by(Rcp_Visual_att) %>%
+  mutate(beta = n_beta / sum(n_beta)) %>%
+  ungroup()
+
+# Calculate percentage deviation formula = (β/α - 1) * 100
+variation_df <- beta_by_attn %>%
+  left_join(alpha_overall, by = "Modality") %>%
+  mutate(
+    deviation = 100 * (beta / alpha - 1)
+  ) %>%
+  mutate(
+    Rcp_Visual_att = factor(Rcp_Visual_att, levels = c("Yes","No"))
+  )
+
+# Table of percentage deviation
+variation_df %>%
+  transmute(
+    Modality,
+    `Recipient visual attention` = Rcp_Visual_att,
+    `α overall` = round(alpha*100, 1),
+    `β within attention` = round(beta*100, 1),
+    `Deviation (%)` = round(deviation, 1)
+  ) %>%
+  kable(format = "html", caption = "Percentage deviation: (β/α − 1) × 100") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Make plot
+plot_variation <- ggplot(variation_df,
+                         aes(x = Rcp_Visual_att, y = deviation, fill = Modality)) +
+  geom_hline(yintercept = 0, color = "grey50") +
+  geom_col(position = position_dodge(width = 0.75), width = 0.65) +
+  labs(
+    x = "Recipient visual attention",
+    y = "Percentage variation",
+    title = "Percentage-variation plot of gesture modality with recipient visual attention"
+  ) +
+  theme_agon() + scico::scale_fill_scico_d(palette = "roma", begin=0.4, end=0.9) +
+  scale_y_continuous(breaks = seq(-100, 100, 25), 
+                     expand = c(0,0)) +
+  theme(legend.title = element_blank())
+
+plot_variation
+ggsave(here::here("plots", "intentionality plots", "Perc_variation_mod_rcp_vA_plot_id.pdf"), width = 16, height = 8)
+ggsave(here::here("plots", "intentionality plots", "Perc_variation_mod_rcp_vA_plot_id.png"), width = 16, height = 8)
+```
+**The percentage variation plot revealed that signallers use more audible and tactile gestures than silent visual gestures when recipients are not visually attending to them.**
+
+
+# Intentionality criteria analyses at bout part level 
+
+We conducted the analyses for the other intentionality criteria at the level of the bout part  (see Data coding).
+
+First we extracted the dataset at the level of the bout part part.
+
+```{r bout-data}
+# Sort bout data and remove unclear bout parts
+bout_data <- xdata %>%
+  group_by(Com_number, Bout_part) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(Com_number, Bout_part, Rcp_Visual_att, Gaze_before, Gaze_during,
+         Response_waiting, Persistence, Signaller, Population, Pop_Signaller, Sex, Outcome) %>%
+  filter(Bout_part != "Unclear") %>%
+  droplevels()
+```
+
+Then we sorted the data by re-leveling Gaze before and Gaze during to "Yes" and "No", and by removing bout parts where the signaller visual attention was unknown or the signaller was out of sight.
+
+```{r sort-gaze-data}
+# Relevel gaze data to Yes and No
+bout_data_gaze_bef <- bout_data %>%
+    mutate(
+      Gaze_before = recode(Gaze_before,
+                                 "VA_90" = "Yes",
+                                 "VA_160" = "Unk",
+                                 "Looking_Back" = "Yes",
+                                 "VA_front" = "Yes",
+                                 "No_VA" = "No")
+    ) %>%
+  filter(!Gaze_before %in% c("Unk", "Out_of_sight")) %>% #remove where unsure Yes or No
+  mutate(
+    Gaze_before = droplevels(Gaze_before)
+    )
+
+bout_data_gaze_dur <- bout_data %>%
+    mutate(
+      Gaze_during = recode(Gaze_during,
+                                 "VA_90" = "Yes",
+                                 "VA_160" = "Unk",
+                                 "Looking_Back" = "Yes",
+                                 "VA_front" = "Yes",
+                                 "No_VA" = "No")
+    ) %>% 
+  filter(!Gaze_during %in% c("Unk", "Out_of_sight")) %>% #remove where unsure Yes or No
+  mutate(
+    Gaze_during = droplevels(Gaze_during)
+  )
+```
+
+# Audience checking: Gaze before - all data
+
+Here we tested for audience checking Gaze before including the whole gaze before dataset (from identified and unidentified signallers).
+
+First we plotted the frequency of bout parts by signaller gaze before. 
+
+### Plot Gaze before  
+
+```{r bar-plot-gaze-bef, fig.width=15}
+# Frequency Gaze before
+bout_data_gaze_bef %>%
+  count(Gaze_before, name = "Frequency") %>%
+  rename(`Signaller gaze before` = Gaze_before) %>%
+  kable(format = "html", caption = "Frequency of signaller visually checking recipient before bout part") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2, width = "100px")
+
+# Plot Gaze before
+plot_gaze_bef = ggplot(bout_data_gaze_bef, aes(x = Gaze_before, fill=Gaze_before)) +
+  geom_bar(color = "black") +
+  labs(title = "Frequency of signaller visually checking recipient before bout part",
+       x = "Signaller gaze before",
+       y = "Frequency", fill = "") + theme_agon() + scale_fill_grey(start = 1, end = 0) +  
+  scale_y_continuous(limits = c(0, 500)) 
+plot_gaze_bef
+ggsave(here::here("plots", "intentionality plots", "Signaller_VA_before_plot.pdf"), width = 12, height = 8)
+ggsave(here::here("plots", "intentionality plots", "Signaller_VA_before_plot.png"), width = 12, height = 8)
+```
+
+### Binomial test Gaze before
+
+Then we used a Binomial test to assess whether signallers visually check their recipient at the onset of the bout part.
+
+```{r bin-gaze-bef}
+# Binomial test
+bin_gaze_bef=binom.test(
+  x = sum(bout_data_gaze_bef$Gaze_before == "Yes"),
+  n = sum(bout_data_gaze_bef$Gaze_before %in% c("Yes", "No")),
+  p = 0.5,
+  alternative = "two.sided"
+)
+bin_gaze_bef 
+```
+**We found that signallers produce more gestures after visually checking the recipient.**
+
+# Audience checking: Gaze before - signaller identified data
+
+Here we tested for Gaze before while controlling for pseudoreplication (repeated data from the same signallers). 
+
+First we subsetted the gaze before data to data from identified signallers contributing at least 4 bout parts (necessary for random effect) and dummy coded the response.
+
+```{r sort-id-gaze-data-bef}
+# Subset gaze before data to identified data
+bout_data_gaze_bef_id <- bout_data_gaze_bef %>%
+  filter(!Signaller %in% c("AF_medium", "AF_old", "AF_young", "AM", "AM_medium", "AM_young")) %>%
+  droplevels() #remove unidentified signallers
+
+# Subset gaze identified data to signallers with at least 4 bout parts
+bout_data_gaze_bef_id <- bout_data_gaze_bef_id %>%
+  group_by(Pop_Signaller) %>%
+  filter(n() >= 4) %>%
+  ungroup() %>% 
+  droplevels() 
+
+# Dummy code response variable
+bout_data_gaze_bef_id$Gaze_before_dc=as.numeric(bout_data_gaze_bef_id$Gaze_before=="Yes") #dummy code No as 0 and Yes as 1
+```
+
+### GLMM for Gaze before 
+
+We then ran a logistic GLMM to test whether signallers produce more bout parts when they are visually attending (Yes) than not (No) the recipient at the onset of the bout part production including Signaller as random effect. 
+
+```{r glmm-gaze-bef}
+GLMM_gaze_bef=glmer(Gaze_before_dc ~ (1|Pop_Signaller),
+            data=bout_data_gaze_bef_id, family=binomial)
+```
+
+#### GLMM Assumptions
+
+Then we checked the glmm assumptions.
+
+```{r glmm-gaze-bef-assum}
+# BLUPs assumption (dist of random effects) #set function by Roger Mundry
+ranef.diagn.plot(GLMM_gaze_bef) #ok
+
+# Model stability
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/glmm_stability.r") #set function by Roger Mundry
+control=glmerControl(optimizer="bobyqa",
+       optCtrl=list(maxfun=100000))
+m_stab_gaze_bef=glmm.model.stab(model.res=GLMM_gaze_bef, contr=control) 
+
+#table(m_stab_gaze_bef$detailed$lme4.warnings) #check for warnings: isSingular messages
+#table(m_stab_gaze_bef$detailed$opt.warnings)  #check for convergence: all models converged now with cor
+
+m_stab_gaze_bef_rd=round(m_stab_gaze_bef$summary[, -1], 3) #check model stability estimates
+m_stab_gaze_bef_rd
+m.stab.plot(m_stab_gaze_bef$summary[, -1]) #check model stability plot
+
+# Overdispersion
+check_overdispersion(GLMM_gaze_bef) #check overdispersion
+```
+
+The distribution of random effects looks good, the model is stable, and there is no issue of overdispersion.
+
+#### GLMM Results
+
+Then we checked the model summary for the results. 
+
+```{r glmm-gaze-bef-res}
+# Summary output
+summary(GLMM_gaze_bef)
+
+# Predicted probability of signallers gesturing when looking at recipient at onset of bout part 
+exp(fixef(GLMM_gaze_bef)["(Intercept)"])/
+      (1+exp(fixef(GLMM_gaze_bef)["(Intercept)"])) #compute probability of gesturing when signaller is looking at rcp
+```
+**We found that signallers produce more gestures after visually checking the recipient.**
+
+
+# Audience checking: Gaze during - all data
+
+Here we tested for Gaze during including the whole dataset (from identified and unidentified signallers).
+
+### Plot Gaze during  
+
+First we plotted the frequency of bout parts by signaller gaze during. 
+
+```{r bar-plot-gaze-dur, fig.width=15}
+# Frequency Gaze during
+bout_data_gaze_dur %>%
+  count(Gaze_during, name = "Frequency") %>%
+  rename(`Signaller gaze during` = Gaze_during) %>%
+  kable(format = "html", caption = "Frequency of signaller visually checking recipient during bout part") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2, width = "100px")
+
+# Plot Gaze during
+plot_gaze_dur=ggplot(bout_data_gaze_dur, aes(x = Gaze_during, fill=Gaze_during)) +
+  geom_bar(color = "black") +
+  labs(title = "Frequency of signaller visually checking recipient during bout part",
+       x = "Signaller gaze during",
+       y = "Frequency", fill = "") + theme_agon() +  scale_fill_grey(start = 1, end = 0) + 
+  scale_y_continuous(limits = c(0, 500)) 
+plot_gaze_dur
+ggsave(here::here("plots", "intentionality plots", "Signaller_VA_during_plot.pdf"), width = 12, height = 8)
+ggsave(here::here("plots", "intentionality plots", "Signaller_VA_during_plot.png"), width = 12, height = 8)
+```
+
+### Binomial test Gaze during
+
+Then we used a Binomial test to test whether signallers visually check their recipient during the bout part.
+
+```{r bin-gaze-dur}
+# Binomial test
+bin_gaze_dur=binom.test(
+  x = sum(bout_data_gaze_dur$Gaze_during == "Yes"),
+  n = sum(bout_data_gaze_dur$Gaze_during %in% c("Yes", "No")),
+  p = 0.5,
+  alternative = "two.sided"
+)
+bin_gaze_dur 
+```
+**We found that signallers visually check the recipient more while gesturing.**
+
+# Audience checking: Gaze during - signaller identified data
+
+Here we tested for Gaze during while controlling for pseudoreplication (repeated data from the same signallers). 
+
+First we subsetted the gaze during data to identified signallers contributing at least 4 bout parts (necessary for random effect) and dummy coded the response.
+
+```{r sort-id-gaze-data-dur}
+# Subset gaze during data to signallers with at least 4 bout parts
+bout_data_gaze_dur_id <- bout_data_gaze_dur %>%
+  filter(!Signaller %in% c("AF_medium", "AF_old", "AF_young", "AM", "AM_medium", "AM_young")) %>%
+  droplevels()#remove unidentified signallers
+
+bout_data_gaze_dur_id <- bout_data_gaze_dur_id %>%
+  group_by(Pop_Signaller) %>%
+  filter(n() >= 4) %>%
+  ungroup() %>% 
+  droplevels() 
+
+# Dummy code response variables for gaze during
+bout_data_gaze_dur_id$Gaze_during_dc=as.numeric(bout_data_gaze_dur_id$Gaze_during=="Yes") #dummy code No as 0 and Yes as 1
+```
+
+### GLMM for Gaze during 
+
+Then we used a logistic GLMM to test whether signallers produce more bout parts when they are visually attending (Yes) than not (No) the recipient during the bout part production including Signaller as random effect. 
+
+```{r glmm-gaze-dur}
+GLMM_gaze_dur=glmer(Gaze_during_dc ~ (1|Pop_Signaller),
+            data=bout_data_gaze_dur_id, family=binomial)
+```
+
+#### GLMM Assumptions
+
+Then we checked the glmm assumptions.
+
+```{r glmm-gaze-dur-assum, warning=FALSE, message=FALSE}
+#BLUPs assumption (dist of random effects)
+ranef.diagn.plot(GLMM_gaze_dur) #set function by Roger
+
+# Model stability
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/glmm_stability.r") #set function by Roger 
+control=glmerControl(optimizer="bobyqa",
+       optCtrl=list(maxfun=100000))
+m_stab_gaze_dur=glmm.model.stab(model.res=GLMM_gaze_dur, contr=control) 
+
+#table(m_stab_gaze_dur$detailed$lme4.warnings) #check for warnings: isSingular messages
+#table(m_stab_gaze_dur$detailed$opt.warnings)  #check for convergence: all models converged now with cor
+
+m_stab_gaze_dur_rd=round(m_stab_gaze_dur$summary[, -1], 3) #check model stability estimates
+m_stab_gaze_dur_rd
+m.stab.plot(m_stab_gaze_dur$summary[, -1]) #check model stability plot
+
+# Overdispersion
+check_overdispersion(GLMM_gaze_dur) #check overdispersion
+```
+The distribution of random effects looks good, the model is stable, and there is no issue of overdispersion.
+
+#### GLMM Results
+
+We then checked the model summary for the results. 
+
+```{r glmm-gaze-dur-res}
+summary(GLMM_gaze_dur)
+exp(fixef(GLMM_gaze_dur)["(Intercept)"])/
+      (1+exp(fixef(GLMM_gaze_dur)["(Intercept)"])) #compute probability of gesturing when signaller is looking at rcp
+```
+**We found that signallers visually check the recipient more while gesturing.**
+
+
+# Combined plot Audience checking
+
+We then made a combined plot for audience checking before and audience checking during.
+
+```{r barplot-gaze-bef-dur, fig.width=20}
+plot_gaze_bef  <- plot_gaze_bef + theme(legend.position = "none") + labs(title = "A. Frequency of audience checking before") 
+plot_gaze_dur  <- plot_gaze_dur + labs(title = "B. Frequency of audience checking during") 
+combined_plot_gaze <- (wrap_elements(plot_gaze_bef) | wrap_elements(plot_gaze_dur)) +
+  plot_annotation(
+    title = "",
+    theme = theme(
+      plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
+    )
+  )
+combined_plot_gaze
+ggsave(here::here("plots", "intentionality plots", "Signaller_Audience checking_plot.pdf"), width = 16, height = 6 )
+ggsave(here::here("plots", "intentionality plots", "Signaller_Audience checking_plot.png"), width = 16, height = 6 )
+
+```
+
+# Response waiting - all data
+
+Here we tested for Response waiting including the whole bout dataset (from identified and unidentified signallers).
+
+First we sorted the bout data by removing when Response waiting was coded as Unknown.  
+
+```{r sort-resp-data}
+# Remove response waiting=Unk
+bout_data_resp <- bout_data %>%
+  filter(!Response_waiting %in% "Unk") %>% #Remove Unk
+  droplevels()
+```
+
+### Plot Response waiting
+
+Then we plotted the frequency of Response waiting. 
+
+```{r bar-plot-resp, fig.width=10}
+# Frequency of response waiting
+bout_data_resp %>%
+  count(Response_waiting, name = "Frequency") %>%
+  rename(`Response waiting` = Response_waiting) %>%
+  kable(format = "html", caption = "Frequency of response waiting by signaller after sequence") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2, width = "100px")
+
+# Relevel for plot
+bout_data_resp$Response_waiting_rl <- factor(
+  bout_data_resp$Response_waiting,
+  levels = c("Yes", "No") 
+)
+
+# Plot response waiting
+plot_resp <- ggplot(bout_data_resp, aes(x = Response_waiting_rl, fill=Response_waiting_rl)) +
+  geom_bar( color = "black") +
+  labs(title = "Frequency of response waiting by signaller after sequence",
+       x = "Response waiting",
+       y = "Frequency", fill = "") + theme_agon() +  scale_fill_grey(start = 1, end = 0)
+plot_resp
+ggsave(here::here("plots", "intentionality plots", "Response_waiting_plot.pdf"), width = 12, height = 8)
+```
+
+### Binomial test Response waiting
+
+We then used a Binomial test to test whether signallers pause for 1 sec (=response waiting) after producing the bout part. 
+
+```{r bin-resp}
+# Binomial test
+bin_resp=binom.test(
+  x = sum(bout_data_resp$Response_waiting == "Yes"),
+  n = sum(bout_data_resp$Response_waiting %in% c("Yes", "No")),
+  p = 0.5,
+  alternative = "two.sided"
+)
+bin_resp 
+```
+**We found that signallers most frequently wait for a response after gesturing.** 
+
+
+# Response waiting - identified data 
+
+Here we tested for Response waiting while controlling for pseudoreplication.
+
+First we subsetted the response waiting  data to identified signallers contributing at least 4 bout parts (necessary for random effect) and dummy coded the response.
+
+```{r sort-id-resp-data}
+# Subset response data to signallers with at least 4 bout parts
+bout_data_resp_id <- bout_data_resp %>%
+  filter(!Signaller %in% c("AF_medium", "AF_old", "AF_young", "AM", "AM_medium", "AM_young")) %>% 
+  droplevels() #remove unidentified signallers
+
+bout_data_resp_id <- bout_data_resp_id %>%
+  group_by(Pop_Signaller) %>%
+  filter(n() >= 4) %>%
+  ungroup() %>% 
+  droplevels() 
+
+# Dummy code response 
+bout_data_resp_id$Response_waiting_dc=as.numeric(bout_data_resp_id$Response_waiting=="Yes") #dummy code No as 0 and Yes as 1
+```
+
+#### GLMM test for Response waiting
+
+Then we used a logistic GLMM to test whether signallers response wait after the bout part production while controlling for pseudoreplication. 
+
+```{r glmm-resp}
+# Dummy code response 
+GLMM_resp=glmer(Response_waiting_dc ~ (1|Pop_Signaller),
+            data=bout_data_resp_id, family=binomial)
+```
+
+#### GLMM Assumptions
+
+Then we checked the glmm assumptions.
+
+```{r glmm-resp-assum, warning=FALSE, message=FALSE}
+# BLUPs assumption (dist of random effects)
+ranef.diagn.plot(GLMM_resp) #set function by Roger 
+
+# Model stability
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/glmm_stability.r") #set function by Roger 
+control=glmerControl(optimizer="bobyqa",
+       optCtrl=list(maxfun=100000))
+m_stab_resp=glmm.model.stab(model.res=GLMM_resp, contr=control) 
+
+#table(m_stab_resp$detailed$lme4.warnings) #check for warnings: isSingular messages
+#table(m_stab_resp$detailed$opt.warnings)  #check for convergence: all models converged now with cor
+
+m_stab_resp_rd=round(m_stab_resp$summary[, -1], 3) #check model stability estimates
+m_stab_resp_rd
+m.stab.plot(m_stab_resp$summary[, -1]) #check model stability plot
+
+# Overdispersion
+check_overdispersion(GLMM_resp) #check overdispersion
+```
+The distribution of random effects looks good, the model is stable, there is no issue of overdispersion.
+
+#### GLMM Results
+
+We then checked the model summary for the results. 
+
+```{r glmm-resp-res}
+# Summary output
+summary(GLMM_resp)
+
+# Predicted probability of signallers gesturing when looking at recipient at onset of bout part 
+exp(fixef(GLMM_resp)["(Intercept)"])/
+      (1+exp(fixef(GLMM_resp)["(Intercept)"])) #compute probability of gesturing when signaller is looking at rcp
+```
+**We found that signallers wait for a response more after gesturing.**
+
+
+# Persistence - all data
+
+Here we tested for Persistence including the whole persistence dataset (from identified and unidentified signallers).
+
+First we sorted the data by removing when Persistence was coded as Unknown and by removing the final bout part for cases where the goal was met as the signaller is expected to not persist due to the goal being met.
+
+```{r sort-persist-data}
+# Remove last bout parts where goal was met
+bout_data_persist <- bout_data %>%
+  filter(!Persistence %in% "Unk") %>%
+  mutate(Boutpart_Number = as.numeric(sub("_.*", "", Bout_part))) %>% # Extract part number(before "_")
+  group_by(Com_number) %>%
+  mutate(Last_Boutpart = Boutpart_Number == max(Boutpart_Number)) %>% # Identify last Bout part per Com_number
+  ungroup() %>%
+  filter(!(Last_Boutpart & !(Outcome %in% c("Exclude", "Unclear_exc")))) %>% # Remove if last part AND not "Exclude" or Unclear_exc 
+  select(-Boutpart_Number, -Last_Boutpart) %>%
+  droplevels()
+```
+
+### Plot Persistence 
+
+We then plotted the frequency of Persistence 
+
+```{r bar-plot-persist, fig.width=10}
+# Frequency persistence
+bout_data_persist %>%
+  count(Persistence, name = "Frequency") %>%
+  rename(`Persistence` = Persistence) %>%
+  kable(format = "html", caption = "Frequency of persistence by signaller when goal not met") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2, width = "100px")
+
+# Relevel for plot
+bout_data_persist$Persistence_rl <- factor(
+  bout_data_persist$Persistence,
+  levels = c("Yes", "No") 
+)
+
+# Plot persistence
+plot_persist <- ggplot(bout_data_persist, aes(x = Persistence_rl, fill = Persistence_rl)) +
+  geom_bar(color = "black") +
+  labs(title = "Frequency of persistence by signaller when goal not met",
+       x = "Persistence",
+       y = "Frequency", fill = "") + theme_agon() +  scale_fill_grey(start = 1, end = 0) + 
+  scale_y_continuous(limits = c(0, 400)) 
+plot_persist
+
+ggsave(here::here("plots", "intentionality plots", "Persistence_plot.pdf"), width = 12, height = 8)
+ggsave(here::here("plots", "intentionality plots", "Persistence_plot.png"), width = 12, height = 8)
+```
+
+#### Binomial test for Persitence
+
+Then we used a Binomial test to test whether signallers keep gesturing when recipients do not meet their goal.
+
+```{r bin-persist}
+# Binomial test
+bin_persist=binom.test(
+  x = sum(bout_data_persist$Persistence == "Yes"),
+  n = sum(bout_data_persist$Persistence %in% c("Yes", "No")),
+  p = 0.5,
+  alternative = "two.sided"
+)
+bin_persist 
+```
+**We found that signallers persist gesturing more when their goal is not met.**
+
+# Persistence - identified data 
+
+Here we tested for Persistence while controlling for pseudoreplication.
+
+First we subsetted the persistence data to identified signallers contributing at least 4 bout parts (necessary for random effect) and dummy coded the response.
+
+```{r sort-id-persist-data}
+# Subset persistence data to signallers with at least 4 bout parts
+bout_data_persist_id <- bout_data_persist %>%
+  filter(!Signaller %in% c("AF_medium", "AF_old", "AF_young", "AM", "AM_medium", "AM_young")) %>% 
+  droplevels() #remove unidentified signallers
+bout_data_persist_id <- bout_data_persist_id %>%
+  group_by(Pop_Signaller) %>%
+  filter(n() >= 4) %>%
+  ungroup() %>% 
+  droplevels() 
+
+# Dummy code response 
+bout_data_persist_id$Persistence_dc=as.numeric(bout_data_persist_id$Persistence=="Yes") #dummy code No as 0 and Yes as 1
+```
+
+#### GLMM test for Persistence
+
+Then we ran a logistic glmm to assess whether signallers persist gesturing after the bout part production including Signaller as a random effect.
+
+```{r glmm-persist}
+GLMM_persist=glmer(Persistence_dc ~ (1|Pop_Signaller),
+            data=bout_data_persist_id, family=binomial)
+```
+
+#### GLMM Assumptions
+
+Then we checked the glmm assumptions.
+
+```{r glmm-persist-assum, warning=FALSE, message=FALSE}
+# BLUPs assumption (dist of random effects)
+ranef.diagn.plot(GLMM_persist) #set function by Roger 
+
+# Model stability
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/glmm_stability.r") #set function by Roger 
+control=glmerControl(optimizer="bobyqa",
+       optCtrl=list(maxfun=100000))
+m_stab_persist=glmm.model.stab(model.res=GLMM_persist, contr=control) 
+
+#table(m_stab_persist$detailed$lme4.warnings) #check for warnings: isSingular messages
+#table(m_stab_persist$detailed$opt.warnings)  #check for convergence: all models converged now with cor
+
+m_stab_persist_rd=round(m_stab_persist$summary[, -1], 3) #check model stability estimates
+m_stab_persist_rd
+m.stab.plot(m_stab_persist$summary[, -1]) #check model stability
+
+# Overdispersion
+check_overdispersion(GLMM_persist) #check overdispersion
+```
+The distribution of random effects looks good, the model is stable, there is no issue of overdispersion.
+
+#### GLMM Results
+
+We then checked the model summary for the results. 
+
+```{r glmm-persist-res}
+# Summary output
+summary(GLMM_persist)
+
+# Predicted probability of signallers gesturing when looking at recipient at onset of bout part 
+exp(fixef(GLMM_persist)["(Intercept)"])/
+      (1+exp(fixef(GLMM_persist)["(Intercept)"])) #compute probability of gesturing when signaller is looking at rcp
+```
+**We found that signallers persist gesturing more when their goal is not met.**
+
+# Combined plot Response waiting and Persistence
+
+We then made a combined plot for response waiting and persistence.
+
+```{r barplot-resp-persist, fig.width=15}
+plot_resp  <- plot_resp + theme(legend.position = "none") + labs(title = "A. Frequency of response waiting")  + 
+  scale_y_continuous(limits = c(0, 410)) 
+plot_persist  <- plot_persist + labs(title = "B. Frequency of persistence") + 
+  scale_y_continuous(limits = c(0, 410)) 
+combined_plot_resp_persist <- (wrap_elements(plot_resp) | wrap_elements(plot_persist)) +
+  plot_annotation(
+    title = "",
+    theme = theme(
+      plot.title = element_text(size = 20, face = "bold", hjust = 0.5)
+    )
+  )
+combined_plot_resp_persist
+ggsave(here::here("plots", "intentionality plots", "Response waiting and Persistence_plot.pdf"), width = 16, height = 6)
+ggsave(here::here("plots", "intentionality plots", "Response waiting and Persistence_plot.png"), width = 16, height = 6)
+```
+
+**Overall, above we find that, during agonsitic communications, elephants gesture by meeting all the criteria for first-order intentionality both at the level of the whole dataset and both when controlling for pseudoreplication.** 
+
+**We thus proceeded by exploring the gestures used and their associated meanings.**
+
+# General information on gestural communications 
+
+```{r gen-info}
+xdata=subset(xdata, ! Gesture_action %in% c("Reach_Touch_Unc")) %>% droplevels() #drop unknown gesture action 
+# Number of communications
+data.frame(`Number of communications` = n_distinct(xdata$Com_number)) %>%
+  setNames("Total number of communications") %>%  
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of communications per population
+xdata %>%
+  distinct(Com_number, Population) %>%
+  count(Population, name = "Number of communications") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of videos 
+data.frame(`Number of videos` = n_distinct(xdata$Video_file)) %>%
+  setNames("Total number of videos") %>%  
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of videos per population
+xdata %>%
+  distinct(Video_file, Population) %>%
+  count(Population, name = "Number of videos") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture tokens 
+data.frame(`Number of tokens` = nrow(xdata)) %>%
+  setNames("Total number of gesture tokens") %>%  
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture tokens per population
+xdata %>%
+  count(Population, name = "Number of gesture tokens") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of tokens per sex
+xdata %>%
+  count(Sex, name = "Number of gesture tokens") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture tokens per sex within each population
+xdata %>%
+  count(Population, Sex, name = "Number of gesture tokens") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture tokens in each modality
+xdata %>%
+  count(Modality, name = "Number of gesture tokens") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture actions
+data.frame(`Number of gesture actions` = n_distinct(xdata$Gesture_action)) %>%
+  setNames("Total number of gesture actions") %>%  
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture types
+data.frame(`Number of gesture types` = n_distinct(xdata$Gesture_type)) %>%
+  setNames("Total number of gesture types") %>%  
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture actions per population
+xdata %>%
+  distinct(Population, Gesture_action) %>%
+  rename(`Gesture action` = Gesture_action) %>%
+  count(Population, name = "Number of gesture actions") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture types per population
+xdata %>%
+  distinct(Population, Gesture_type) %>%
+  rename(`Gesture type` = Gesture_type) %>%
+  count(Population, name = "Number of gesture types") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Number of gesture actions per modality
+xdata %>%
+  distinct(Modality, Gesture_action) %>%
+  rename(`Gesture action` = Gesture_action) %>%
+  count(Modality, name = "Number of gesture actions") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Frequency of use of body part 
+bp_gesture <- xdata %>%
+ count(Body_part_2, name = "Frequency")  %>%
+  mutate(Percentage = round((Frequency / sum(Frequency)) * 100, 2)) %>%
+  rename(`Body part` = Body_part_2) 
+
+# Number of gesture actions in total and per gesture type
+gesture_act_type <- xdata %>%
+ count(Gesture_action, Gesture_type, name = "Frequency") %>%
+  arrange(Gesture_action, Gesture_type) %>%
+  group_by(Gesture_action) %>%
+  mutate(`Gesture action frequency` = sum(Frequency)) %>%
+  mutate(
+    `Gesture action` = if_else(row_number() == 1L, Gesture_action, ""),
+    `Gesture action frequency` = if_else(row_number() == 1L,
+                                  as.character(`Gesture action frequency`), "")) %>%
+  ungroup() %>%
+  rename(`Gesture type` = Gesture_type) %>%
+  rename(`Gesture type frequency` = Frequency) %>%
+  select(`Gesture action`, `Gesture action frequency`, `Gesture type`, `Gesture type frequency`) 
+   
+gesture_act_type %>%
+  kable(format = "html", caption = "Frequencies of gesture actions and types") %>%
+  kable_styling("striped", full_width = FALSE) 
+
+write.csv(gesture_act_type, "all gesture actions_types.csv")
+
+# Number of gesture actions in total and per gesture type according to population
+pop_obs_act <- xdata %>%
+  group_by(Gesture_action) %>%
+  summarise(`Population action` = paste(sort(unique(Population)), collapse = ", "),
+  .groups = "drop")
+
+pop_obs_type <- xdata %>%
+  group_by(Gesture_type) %>%
+  summarise(`Population type` = paste(sort(unique(Population)), collapse = ", "),
+  .groups = "drop")
+
+gesture_act_type_pop <- xdata %>%
+ count(Gesture_action, Gesture_type, name = "Frequency") %>%
+  arrange(Gesture_action, Gesture_type) %>%
+  group_by(Gesture_action) %>%
+  mutate(`Gesture action frequency` = sum(Frequency)) %>%
+  ungroup() %>%
+  left_join(pop_obs_act, by = "Gesture_action") %>%
+  left_join(pop_obs_type, by = c("Gesture_type")) %>%
+  group_by(Gesture_action) %>%
+  mutate(
+   `Gesture action`        = if_else(row_number() == 1L, Gesture_action, ""),
+    `Gesture action frequency`  = if_else(row_number() == 1L, as.character(`Gesture action frequency`),""),
+    `Population action` = if_else(row_number() == 1L, `Population action`, "")
+  ) %>%
+  ungroup() %>%
+  rename(`Gesture type` = Gesture_type) %>%
+  rename(`Gesture type frequency` = Frequency) %>%
+  select(`Gesture action`, `Gesture action frequency`, `Population action`, 
+         `Gesture type`,`Gesture type frequency`, `Population type`) 
+   
+gesture_act_type_pop %>%
+  kable(format = "html", caption = "Frequencies of gesture actions and gesture types") %>%
+  kable_styling("striped", full_width = FALSE) 
+
+write.csv(gesture_act_type_pop, "all gesture actions_types_pop.csv")
+```
+
+# Population elephant agonistic gestures   
+
+## Cumulative frequency plot (Supplementary)
+
+We first explored the cumulative frequency plots of *all observed* gesture types identified in both populations.
+
+```{r Pop-asymptote, fig.width=25, fig.height=10}
+# sort data grouped by population
+cum_plot_data <- xdata %>%
+  group_by(Population) %>%
+  arrange(Com_number, .by_group = TRUE) %>%
+  # build cumulative counts of gesture type every 10 gesture tokens
+  group_modify(~{
+    n <- nrow(.x)
+    seqs <- sort(unique(c(0, seq(10, n, by = 10), n)))  # ensure 'n' included
+    counts <- vapply(
+      seqs,
+      function(i) {
+        if (i == 0) 0L else dplyr::n_distinct(.x$Gesture_type[1:i])
+      },
+      integer(1)
+    )
+    tibble(n_sequence = seqs, n_gtypes = counts)
+  }) %>%
+  ungroup()
+#cum_plot_data
+
+xmax <- max(cum_plot_data$n_sequence)
+
+cum_plot <- ggplot(cum_plot_data, aes(x = n_sequence, y = n_gtypes, shape = Population, color=Population)) +
+  geom_point(size = 5) +
+  geom_line() +
+  labs(
+    title = "Cumulative number of all gesture types used in agonistic interactions by Addo and Marakele elephants",
+    y = "Number of gesture types identified",
+    x = "Number of gesture tokens coded"
+  ) +
+  scale_x_continuous(
+    limits = c(0, xmax),
+    breaks = seq(0, xmax, by = 50)  
+  ) + theme_agon() +
+  scale_color_scico_d(
+    palette = "navia",
+    begin = 0.2,
+    end = 0.7)
+cum_plot
+
+ggsave(here::here("plots", "asymptote plots", "Asymptote_Gesture_types_all.pdf"), cum_plot, width = 16, height = 10)
+ggsave(here::here("plots", "asymptote plots", "Asymptote_Gesture_types_all.png"), cum_plot, width = 16, height = 10)
+```
+
+## Bar plot all gesture actions in Addo and Marakele - all data 
+
+Then we plotted the frequencies of *all observed* gesture actions and gesture types observed in both populations.
+
+```{r gest-pop-plot-all-act, fig.width=25, fig.height=10}
+gact<- ggplot(xdata, aes(x = as.character(Gesture_action), fill = Population)) +
+  geom_bar() + 
+  labs(title = "Frequencies of all gesture actions used in agonistic interactions by Addo and Marakele elephants",
+       x = "Gesture action",
+       y = "Frequency",
+       fill = "") + theme_agon() +
+  scale_fill_scico_d(
+   palette = "navia",
+    begin = 0.2,
+    end = 0.7) + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=.5))  + scale_y_continuous(breaks = seq(0, max(table(xdata$Gesture_action)), 25)) 
+ggsave(here::here("plots", "population plots", "Gesture_actions_all.pdf"), width = 16, height = 8)
+ggsave(here::here("plots", "population plots", "Gesture_actions_all.png"), width = 16, height = 8)
+
+gtype <- ggplot(xdata %>%
+    arrange(Gesture_action, Gesture_type) %>%
+    mutate(Gesture_type = factor(Gesture_type, levels = unique(Gesture_type))),
+  aes(x = Gesture_type, fill = Population)
+) +
+  geom_bar() +
+  labs(title = "Frequencies of all gesture types used in agonistic interactions by Addo and Marakele elephants",
+       x = "Gesture type",
+       y = "Frequency",
+       fill = "") + theme_agon() +
+  scale_fill_scico_d(
+   palette = "navia",
+    begin = 0.2,
+    end = 0.7) + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=.5))  + scale_y_continuous(breaks = seq(0, max(table(xdata$Gesture_type)), 25)) 
+gtype
+
+ggsave(here::here("plots", "population plots", "Gesture_types_all.pdf"), width = 20, height = 12)
+ggsave(here::here("plots", "population plots", "Gesture_types_all.png"), width = 20, height = 12)
+
+gact  <- gact + theme(legend.position = "none") + labs(title = "A. Agonistic gesture actions") 
+gtype  <- gtype + labs(title = "B. Agonistic gesture types") 
+combined_plot_gact_gtype <- (wrap_elements(gact) / wrap_elements(gtype)) +
+  plot_annotation(
+    title = "",
+    theme = theme(
+      plot.title = element_text(size = 20, face = "bold", hjust = 0.5)
+    )
+  )
+ggsave(here::here("plots", "population plots", "Combined_Gesture_action_type_all.pdf"), width = 20, height = 20)
+```
+
+# Intentional gesture types used during agonsitic communications
+
+We checked which gesture types met used during agonistic communications met the intentionality criteria by excluding those that never showed goal-directedness: never used during bout parts of communications where the goal was met. 
+
+```{r intent-gestures-all}
+# Gesture types
+# Count intentional gesture types (from data excluding cases where never resulting in goal met)
+data.frame(
+  `Total number of intentional gesture types` =
+    xdata %>%
+      filter(! Outcome %in% c("Exclude", "Unclear_exc", "Other_rcp", "Unable", "Unk")) %>% 
+      summarise(n = n_distinct(Gesture_type)) %>%
+      pull(n)
+) %>%
+  setNames("Total number of intentional gesture types") %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Check which body actions are not intentional 
+original_levels <- levels(xdata$Gesture_type)
+
+remaining_levels <- xdata %>%
+  filter(! Outcome %in% c("Exclude", "Unclear_exc")) %>% #(Bout_part %in% c("1_1", "Unclear") &
+  mutate(Gesture_type = fct_drop(Gesture_type)) %>%  # drop unused levels after filtering
+  { levels(.$Gesture_type) }
+
+dropped_levels_gu <- setdiff(original_levels, remaining_levels)
+dropped_levels_gu
+```
+**Frond Body Lean backward, Ear Hit object, Front limb Swing and Tail Raise were not associated with goal-directedness so it was not considered intentionally produced**
+
+## Gesture types used at least 3 times
+
+Last, to describe the context-specific gestural repertoire used during agonistic interactions, we included  gesture types were observed being used at least 3 times and plotted them.
+
+```{r intent-gestures-min3types, fig.width=25, fig.height=10}
+# Create subset of dataset where non-intentional gesture types removed
+xdata_int <- xdata %>%
+  filter(
+    !(Gesture_type %in% c("Body Lean backward", "Front limb Swing", "Head Lower", "Tail Raise", "Ear Hit object"))
+  )  %>% 
+  droplevels()
+
+# Remove subset of gesture types not used at least 3 times
+xdata_int_min3_gu <- xdata_int %>%
+  group_by(Gesture_type) %>%
+  filter(n() >= 3) %>%
+  ungroup() %>%
+  droplevels()
+
+# Check number of gesture types used at least 3 times
+data.frame(`Number of gesture types used at least 3 times` = 
+  n_distinct(xdata_int_min3_gu$Gesture_type))  %>% 
+  setNames("Number of intentional gesture types used at least 3 times") %>% 
+  kable(format = "html", caption = "") %>% kable_styling("striped", full_width = FALSE)
+
+# Check number of gesture actions from types used at least 3 times
+data.frame(`Number of gesture actions used at least 3 times` = 
+  n_distinct(xdata_int_min3_gu$Gesture_action))  %>% 
+  setNames("Number of intentional gesture actions from types used at least 3 times") %>% 
+  kable(format = "html", caption = "") %>% kable_styling("striped", full_width = FALSE)
+
+# Check which gesture types were not used at least 3 times overall
+original_levels  <- levels(xdata_int$Gesture_type)
+remaining_levels <- levels(xdata_int_min3_gu$Gesture_type)
+dropped_levels <- setdiff(original_levels, remaining_levels)
+dropped_levels
+
+# Check number of gesture types in each population
+xdata_int_min3_gu %>%
+  group_by(Population) %>%
+  summarise(`Number of gesture types` = n_distinct(Gesture_type)) %>%
+  kable(format = "html", 
+        caption = "Number of intentional gesture types (used at least 3 times) per population") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Check number of gesture actions (from used at least 3 times) in each population
+xdata_int_min3_gu %>%
+  group_by(Population) %>%
+  summarise(`Number of gesture actions` = n_distinct(Gesture_action)) %>%
+  kable(format = "html", 
+        caption = "Number of intentional gesture actions per population") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Check number of gesture types by modality 
+xdata_int_min3_gu %>%
+  group_by(Modality) %>%
+  summarise(`Number of gesture types` = n_distinct(Gesture_type)) %>%
+  kable(format = "html", 
+        caption = "Number of intentional gesture types per modality") %>%
+  kable_styling("striped", full_width = FALSE)
+
+# Frequency of use of body part in intentional gesture tokens of types used min 3 times
+bp_gesture <-xdata_int_min3_gu %>%
+ count(Body_part_2, name = "Frequency")  %>%
+  mutate(Percentage = round((Frequency / sum(Frequency)) * 100, 2)) %>%
+  rename(`Body part` = Body_part_2)
+
+bp_gesture %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE)
+
+write.csv(bp_gesture, "frequency body parts.csv")
+
+# Frequency of gesture types used min 3 times per population and gesture type
+pop_obs_act <- xdata %>%
+  group_by(Gesture_action) %>%
+  summarise(`Population action` = paste(sort(unique(Population)), collapse = ", "),
+  .groups = "drop")
+
+pop_obs_type <- xdata %>%
+  group_by(Gesture_type) %>%
+  summarise(`Population type` = paste(sort(unique(Population)), collapse = ", "),
+  .groups = "drop")
+
+gesture_act_type_pop <- xdata_int_min3_gu %>%
+ count(Gesture_action, Gesture_type, name = "Frequency") %>%
+  arrange(Gesture_action, Gesture_type) %>%
+  group_by(Gesture_action) %>%
+  mutate(`Gesture action frequency` = sum(Frequency)) %>%
+  ungroup() %>%
+  left_join(pop_obs_act, by = "Gesture_action") %>%
+  left_join(pop_obs_type, by = c("Gesture_type")) %>%
+  group_by(Gesture_action) %>%
+  mutate(
+   `Gesture action`        = if_else(row_number() == 1L, Gesture_action, ""),
+    `Gesture action frequency`  = if_else(row_number() == 1L, as.character(`Gesture action frequency`),""),
+    `Population action` = if_else(row_number() == 1L, `Population action`, "")
+  ) %>%
+  ungroup() %>%
+  rename(`Gesture type` = Gesture_type) %>%
+  rename(`Gesture type frequency` = Frequency) %>%
+  select(`Gesture action`, `Gesture action frequency`, `Population action`, 
+         `Gesture type`,`Gesture type frequency`, `Population type`) 
+   
+gesture_act_type_pop %>%
+  kable(format = "html", caption = "Frequencies of gesture actions and gesture types") %>%
+  kable_styling("striped", full_width = FALSE) 
+
+write.csv(gesture_act_type_pop, "min3 gesture actions_types_pop.csv")
+```
+
+```{r plots-intent-gestures-min3types, fig.width=25, fig.height=10}
+## Make plot actions
+gact_min3 <- ggplot(xdata_int_min3_gu, aes(x = as.character(Gesture_action), fill = Population)) +
+  geom_bar() + 
+  labs(title = "Frequencies of intentional gesture actions used in agonistic interactions by Addo and Marakele elephants",
+       x = "Gesture action",
+       y = "Frequency",
+       fill = "") + theme_agon() +
+  scale_fill_scico_d(
+   palette = "navia",
+    begin = 0.2,
+    end = 0.7) + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=.5)) + scale_y_continuous(breaks = seq(0, max(table(xdata_int_min3_gu$Gesture_action)), 25)) 
+
+ggsave(here::here("plots", "population plots", "Gesture_actions_population_min3types.pdf"), width = 18, height = 9)
+ggsave(here::here("plots", "population plots", "Gesture_actions_population_min3types.png"), width = 18, height = 9)
+
+## Make plot types
+gtype_min3 <- ggplot(
+  xdata_int_min3_gu %>%
+    arrange(Gesture_action, Gesture_type) %>%
+    mutate(Gesture_type = factor(Gesture_type, levels = unique(Gesture_type))),
+  aes(x = Gesture_type, fill = Population)
+) +
+  geom_bar() +
+  labs(
+    title = "Frequencies of intentional gesture types used in agonistic interactions by Addo and Marakele elephants",
+    x = "Gesture type", y = "Frequency", fill = ""
+  ) +
+  theme_agon() +
+  scale_fill_scico_d(palette = "navia", begin = 0.2, end = 0.7) +
+  scale_y_continuous(breaks = seq(0, max(table(xdata_int_min3_gu$Gesture_type)), 25)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))
+gtype_min3
+
+ggsave(here::here("plots", "population plots", "Gesture_types_population_min3.pdf"), width = 18, height = 9)
+ggsave(here::here("plots", "population plots", "Gesture_types_population_min3.png"), width = 18, height = 9)
+
+gact_min3  <- gact_min3 + theme(legend.position = "none") + labs(title = "A. Agonistic gesture actions") 
+gtype_min3  <- gtype_min3 + labs(title = "B. Agonistic gesture types") 
+combined_plot_gact_gtype <- (wrap_elements(gact_min3) / wrap_elements(gtype_min3)) +
+  plot_annotation(
+    title = "",
+    theme = theme(
+      plot.title = element_text(size = 20, face = "bold", hjust = 0.5)
+    )
+  )
+ggsave(here::here("plots", "population plots", "Combined_Gesture_action_type_min3.pdf"), width = 20, height = 20)
+ggsave(here::here("plots", "population plots", "Combined_Gesture_action_type_min3.png"), width = 20, height = 20)
+```
+
+# Cumulative frequency plot of intentional gesture types observed at least three times 
+
+We then plotted their cumulative frequency plot of intentional gesture types against their gesture tokens coded to understand if we had fully catalogued the repertoires in both populations.
+
+```{r Pop-asymptote-gmin3, fig.width=25, fig.height=10}
+cum_plot_data_2 <- xdata_int_min3_gu %>%
+  group_by(Population) %>%
+  arrange(Com_number, .by_group = TRUE) %>%
+  droplevels() %>%
+  # build cumulative-unique counts in steps of 10
+  group_modify(~{
+    n <- nrow(.x)
+    seqs <- sort(unique(c(0, seq(10, n, by = 10), n)))  # ensure 'n' included
+    counts <- vapply(
+      seqs,
+      function(i) {
+        if (i == 0) 0L else dplyr::n_distinct(.x$Gesture_type[1:i])
+      },
+      integer(1)
+    )
+    tibble(n_sequence = seqs, n_g_types = counts)
+  }) %>%
+  ungroup()
+#cum_plot_data_2
+
+# One plot with 2 curves (colored by Population)
+xmax <- max(cum_plot_data_2$n_sequence)
+
+cum_plot_2 <- ggplot(cum_plot_data_2, aes(x = n_sequence, y = n_g_types, shape = Population, color=Population)) +
+  geom_point(size = 5) +
+  geom_line() +
+  labs(
+    title = "Cumulative number of intentional gesture types used in agonistic interactions by Addo and Marakele elephants",
+    y = "Number of gesture types identified",
+    x = "Number of gesture tokens coded"
+  ) +
+  scale_x_continuous(
+    limits = c(0, xmax),
+    breaks = seq(0, xmax, by = 50)  
+  ) + theme_agon() +
+  scale_color_scico_d(
+    palette = "navia",
+    begin = 0.2,
+    end = 0.7)
+cum_plot_2
+
+ggsave(here::here("plots", "asymptote plots", "Asymptote_gesture_types_min3.pdf"), cum_plot_2, width = 18, height = 9)
+ggsave(here::here("plots", "asymptote plots", "Asymptote_gesture_types_min3.png"), cum_plot_2, width = 18, height = 9)
+```
+**The repertoire starts reaching asymptote in Addo but not in Marakele**
+
+# Repertoires of regular use in Addo and Marakele
+
+We then checked and compared the repertoire of regularly used gesture types by the two populations. These represent the gesture types that, when ordered in frequency of occurrence, cumulatively represented 70% of gesture tokens. 
+
+## Addo 
+
+```{r rep-reg-Addo}
+# Subset to Addo gesture actions 
+xdata_int_addo_gu <- subset(xdata_int, Population %in% "Addo") %>% 
+  droplevels() 
+
+# Repertoire of Addo gesture actions
+gu_counts_addo <- xdata_int_addo_gu %>%
+  mutate(Gesture_type = droplevels(Gesture_type)) %>%
+  count(Gesture_type, name = "Frequency") %>%
+  arrange(desc(Frequency)) %>%
+  rename(`Gesture type` = Gesture_type)
+
+## Calculate percentages and cumulative percentages of actions
+gu_counts_addo <- gu_counts_addo %>%
+  mutate(
+    Total = sum(Frequency),
+    Percentage = round(100 * Frequency / sum(Frequency), 2), 
+    Cumulative_percentage = round(cumsum(Percentage), 2)
+  )
+
+## Identify the repertoire of regular use of actions (~70%)
+types_70_addo <- gu_counts_addo %>%
+  filter(Cumulative_percentage <= 70) 
+
+types_70_addo %>%
+  rename(`Cumulative percentage` = Cumulative_percentage) %>%
+  kable(format = "html", caption = "Repertoire of regular use in Addo") %>%
+  kable_styling("striped", full_width = FALSE) 
+
+write.csv(types_70_addo, "rep_reg_use_Addo.csv", row.names = FALSE) # save for table for paper
+```
+
+### Marakele 
+
+```{r rep-reg-Mar}
+# Subset to Marakele gesture actions 
+xdata_int_mar_gu <- subset(xdata_int, Population %in% "Marakele") %>% 
+  droplevels() 
+
+# Repertoire of Marakele gesture actions
+gu_counts_mar <- xdata_int_mar_gu %>%
+  mutate(Gesture_type = droplevels(Gesture_type)) %>%
+  count(Gesture_type, name = "Frequency") %>%
+  arrange(desc(Frequency)) %>%
+  rename(`Gesture type` = Gesture_type)
+
+## Calculate percentages and cumulative percentages of actions
+gu_counts_mar <- gu_counts_mar %>%
+  mutate(
+   Total = sum(Frequency),
+    Percentage = round(100 * Frequency / sum(Frequency), 2), 
+    Cumulative_percentage = round(cumsum(Percentage), 2)
+  )
+
+## Identify the repertoire of regular use of actions (~70%)
+types_70_mar <- gu_counts_mar %>%
+  filter(Cumulative_percentage <= 70) 
+
+types_70_mar %>%
+  rename(`Cumulative percentage` = Cumulative_percentage) %>%
+  kable(format = "html", caption = "Repertoire of regular use in Marakele") %>%
+  kable_styling("striped", full_width = FALSE) 
+
+write.csv(types_70_mar, "rep_reg_use_Marakele.csv", row.names = FALSE) # save for table for paper
+```
+
+**The populations shared three out of 8/9 of their frequently used gesture types.**
+
+# Goals of elephant agonistic gestural communications
+
+We then checked the goals (i.e., meanings) of elephant gestural communications during agonistic interactions in the two populations.
+
+To do so, we only included communications where the goal was met. 
+
+```{r goals}
+# Subset data where goal was met and known
+xdata_goals <- xdata %>%
+  filter(!Outcome %in% c("Exclude", "Unclear_exc", "Other_rcp", "Unable", "Unk"))%>%
+  droplevels() 
+
+# Add a secondary Goal column where Move away, Move away water, Move away reeds etc lumped into Move away (same for Stop behaviour goals)
+xdata_goals <- xdata_goals %>%
+  mutate(
+    Goal_2 = case_when(
+    Goal %in% c("Move_away_water") ~ "Move away",
+    Goal %in% c("Move_away_reeds") ~ "Move away",
+    Goal %in% c("Move_away") ~ "Move away",
+    TRUE ~ "Stop behaviour"
+    )
+  )
+
+# Goal types 
+xdata_goals %>%
+  distinct(Com_number, Goal_2) %>%
+  count(Goal_2, name = "Number of communications") %>%
+  mutate(Percentage = round((`Number of communications`/ sum(`Number of communications`)) * 100, 1)) %>% 
+  rename(`Goal` = Goal_2) %>%
+  kable(format = "html", caption = "") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) 
+
+# Goal types per population
+goals_table_pop <- xdata_goals %>%
+  distinct(Com_number, Population, Goal) %>%
+  count(Goal, Population, name = "Number of communications") %>%
+  rename(
+    `Population` = Population,
+    `Goal` = Goal)
+
+## Save table Goal types per population
+goals_table_pop %>%
+  kable(format = "html", caption = "Number of communications per goal and population") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:3, width = "120px")
+
+write.csv(goals_table_pop, "goals_pop.csv", row.names = FALSE) # save for table for paper
+```
+
+**During all agonistic communications (including all actions) elephants gesture to ask the recipient to "Move away" (81% of communications) and "Stop their behaviour" (19 % of communications).**
+**In Addo 43% (45/105) of agonistic communications were used to ask the recipient to move away from the water or to stop drinking/approaching water, while in Marakele 33% (60) to move away from the reeds or stop drinking/approaching reeds.**
+
+# Goals of elephant gesture types
+
+We then explored the meanings of each gesture type observed at least three times during successful agonistic communications. 
+
+```{r goals-gest}
+# All goals per all gesture types (ga min 3 times)
+xdata_goals_gu_min3 <- xdata_goals %>%
+  group_by(Gesture_type) %>%
+  filter(n() >= 3) %>%
+  ungroup() %>%
+  droplevels()
+
+goals_gu_table <- xdata_goals_gu_min3 %>%
+  count(Gesture_type, Goal_2, name= "Frequency") %>%
+  group_by(Gesture_type) %>%
+  mutate(Percentage = round(100 * Frequency / sum(Frequency), 2)) %>%
+  ungroup() %>%
+  rename(
+    `Goal` = Goal_2,
+    `Gesture type` = Gesture_type)
+
+goals_gu_table %>%
+  kable(format = "html", caption = "Number of goals per gesture type") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:3, width = "120px")
+
+write.csv(goals_gu_table, "goals_gtypes_all.csv", row.names = FALSE) # save for table for paper
+
+ggplot(goals_gu_table, aes(x = as.character(`Gesture type`), y = Percentage, fill = Goal)) +
+  geom_col(color = "black", position = "stack") + 
+  labs(title = "Percentages of goals by gesture type in agonistic interactions",
+       x = "Gesture type ",
+       y = "Percentage",
+       fill = "") + theme_agon() +
+  scale_fill_grey(start = 1, end = 0) +
+  scale_y_continuous(breaks = seq(0, max(table(xdata_goals_gu_min3$Gesture_type)), 25)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))
+
+ggsave(here::here("plots", "intentionality plots", "Percent_goals_gesture_types_all.pdf"), width = 16, height = 8)
+ggsave(here::here("plots", "intentionality plots", "Percent_goals_gesture_types_all.png"), width = 16, height = 8)
+```
+
+# Population differences in gestural success and persistence
+
+Lastly, we compared if Addo and Marakele elephants show population differences in the success of their gesturing at achieving goals and in their degree of gestural persistence. 
+We again used logistic GLMMs including Population as a fixed effect and Signaller as random effect to control for pseudoreplication. 
+
+### GLMM Outcome Population comparison
+
+For the Outcome population comparison, first we sorted the data removing levels of Outcome: where it was unclear if the goal was met by the recipient reaction at the end of the communication (Outcome=Exclude), where the communication ended due to external circumstances (e.g., the recording was interrupted). We then re-leveled Outcome to "No_reaction" and "Reaction" and subsetted the data to data from signallers contributing at least 4 bout parts (following above).
+
+```{r sort-outcome-data}
+bout_data_outcome <- bout_data %>%
+  filter(!Outcome %in% c("Unable", "Unclear_exc", "Unk")) %>%  # Step 1: remove uncertain reactions
+  mutate(
+    Outcome = case_when(
+      Outcome %in% c("Exclude", "Unclear_inc") ~ "No_reaction",  # Step 2: recode
+      TRUE ~ "Reaction"
+    )
+  ) %>%
+  mutate(
+    Outcome = factor(Outcome)  # Step 3: drop unused levels (droplevels() not needed if you use factor())
+  )
+
+# Subset Outcome data to signallers with at least 4 bout parts
+bout_data_outcome_id <- bout_data_outcome %>%
+  filter(!Signaller %in% c("AF_medium", "AF_old", "AF_young", "AM", "AM_medium", "AM_young")) %>%
+  droplevels()#remove unidentified signallers
+
+bout_data_outcome_id <- bout_data_outcome_id %>%
+  group_by(Pop_Signaller) %>%
+  filter(n() >= 4) %>%
+  ungroup() %>% 
+  droplevels() 
+
+# Dummy code response 
+bout_data_outcome_id$Outcome_dc=as.numeric(bout_data_outcome_id$Outcome=="Reaction") #dummy code No as 0 and Yes as 1
+```
+
+#### GLMM for Outcome
+
+We ran the glmm.
+
+```{r glmm-outcome-pop}
+bout_data_outcome_id %>%
+  count(Population, Outcome, name = "n") %>%
+  rename(
+    `Population` = Population,
+    `Outcome` = Outcome,
+    `Number of bout parts` = n
+  ) %>%
+  kable(format = "html", caption = "Number of bout parts leading to recipient reaction or not by population") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:3, width = "120px")
+
+GLMM_outcome_pop=glmer(Outcome_dc ~ Population + (1|Pop_Signaller),
+            data=bout_data_outcome_id, family=binomial)
+```
+
+#### GLMM Assumptions
+
+Then we checked the glmm assumptions.
+
+```{r glmm-outcome-pop-assum, warning=FALSE, message=FALSE}
+# BLUPs assumption (dist of random effects)
+ranef.diagn.plot(GLMM_outcome_pop) #ok
+
+# Model stability
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/glmm_stability.r") #set function by Roger 
+control=glmerControl(optimizer="bobyqa",
+       optCtrl=list(maxfun=100000))
+m_stab_outcome_pop=glmm.model.stab(model.res=GLMM_outcome_pop, contr=control) 
+
+#table(m_stab_outcome_pop$detailed$lme4.warnings) #check for warnings: isSingular messages
+#table(m_stab_outcome_pop$detailed$opt.warnings)  #check for convergence: all models converged now with cor
+
+m_stab_outcome_pop_rd=round(m_stab_outcome_pop$summary[, -1], 3) #check model stability estimates
+m_stab_outcome_pop_rd
+m.stab.plot(m_stab_outcome_pop$summary[, -1]) #check model stability plot
+
+# Overdispersion
+check_overdispersion(GLMM_outcome_pop) #check overdispersion
+```
+The distribution of random effects looks good, the model is stable, there is no issue of overdispersion.
+
+#### GLMM Results
+
+Then we used a full-null model comparison to first check if the predictor (Population) had a general effect in the model. 
+
+```{r glmm-outcome-pop-chisq}
+# Full-null model comparison
+Null_outcome_pop=glmer(Outcome_dc ~  (1|Pop_Signaller),
+            data=bout_data_outcome_id, family=binomial)
+Chisq_outcome_pop<-round(as.data.frame(anova(Null_outcome_pop, GLMM_outcome_pop, test="Chisq")), 3)
+Chisq_outcome_pop
+```
+**We found no population differences in how successful elephants are at achieving goals.**
+
+### GLMM Persistence Population comparison
+
+For the persistence population comparison, we used the bout data above excluding signallers with less than 4 bout parts (see above Intentionality Persistence model). 
+
+We ran the glmm.
+
+```{r glmm-persist-pop}
+bout_data_persist_id %>%
+  count(Population, Persistence, name = "n") %>%
+  rename(
+    `Population` = Population,
+    `Persistence` = Persistence,
+    `Number of bout parts` = n
+  ) %>%
+  kable(format = "html", caption = "Number of bout parts followed by persistence or not by population") %>%
+  kable_styling("striped", full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:3, width = "120px")
+
+GLMM_persist_pop=glmer(Persistence_dc ~ Population + (1|Pop_Signaller),
+            data=bout_data_persist_id, family=binomial)
+```
+
+#### GLMM Assumptions
+
+Then we checked the glmm assumptions.
+
+```{r glmm-persist-pop-assum, warning=FALSE, message=FALSE}
+# BLUPs assumption (dist of random effects)
+ranef.diagn.plot(GLMM_persist_pop) #set function by Roger 
+
+# Model stability
+source("~/Desktop/R courses/Mundry R course 2020/course material/functions/glmm_stability.r") #set function by Roger 
+control=glmerControl(optimizer="bobyqa",
+       optCtrl=list(maxfun=100000))
+m_stab_persist_pop=glmm.model.stab(model.res=GLMM_persist_pop, contr=control) 
+
+#table(m_stab_persist_pop$detailed$lme4.warnings) #check for warnings: isSingular messages
+#table(m_stab_persist_pop$detailed$opt.warnings)  #check for convergence: all models converged now with cor
+
+m_stab_persist_pop_rd=round(m_stab_persist_pop$summary[, -1], 3) #check model stability estimates
+m_stab_persist_pop_rd
+m.stab.plot(m_stab_persist_pop$summary[, -1]) #check model stability plot
+
+# Overdispersion
+check_overdispersion(GLMM_persist_pop) #check overdispersion
+```
+The distribution of random effects looks good, the model is stable, there is no issue of overdispersion.
+
+#### GLMM Results
+
+Then we used a full-null model comparison to first check if the predictor (Population) had a general effect in the model. 
+
+```{r glmm-persist-pop-chisq}
+# Full-null model comparison
+Null_persist_pop=glmer(Persistence_dc ~  (1|Pop_Signaller),
+            data=bout_data_persist_id, family=binomial)
+Chisq_persist_pop<-round(as.data.frame(anova(Null_persist_pop, GLMM_persist_pop, test="Chisq")), 3)
+Chisq_persist_pop
+```
+**We found no population differences in the degree of gestural persistence used by elephants.**
+
